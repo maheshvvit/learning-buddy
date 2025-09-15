@@ -33,10 +33,19 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      await login(formData);
+      const response = await login(formData);
+      console.log('LoginPage: login response:', response);
+      const authState = JSON.parse(localStorage.getItem('learning-buddy-auth'));
+      console.log('LoginPage: localStorage auth state:', authState);
       toast.success('Welcome back!');
+      // Wait for auth state to persist
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Initialize auth state
+      const { initializeAuth } = useAuthStore.getState();
+      await initializeAuth();
       navigate(from, { replace: true });
     } catch (error) {
+      console.error('LoginPage: login error:', error);
       toast.error(error.response?.data?.message || 'Login failed');
     } finally {
       setIsLoading(false);
@@ -44,10 +53,10 @@ const LoginPage = () => {
   };
 
   return (
-    <div>
+    <div className="max-w-md mx-auto p-8 rounded-xl shadow-lg text-white border-4 border-pink-300 bg-gradient-to-r from-purple-700/70 via-pink-600/70 to-red-600/70">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-foreground">Welcome back</h2>
-        <p className="text-muted-foreground mt-2">
+        <h2 className="text-3xl font-bold text-white">Welcome back</h2>
+        <p className="text-pink-100 mt-2">
           Sign in to your account to continue learning
         </p>
       </div>
@@ -132,4 +141,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-

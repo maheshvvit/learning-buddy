@@ -8,26 +8,38 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('learning-buddy-auth');
-    if (token) {
-      try {
-        const authData = JSON.parse(token);
-        if (authData.state?.token) {
-          config.headers.Authorization = `Bearer ${authData.state.token}`;
+  // Request interceptor to add auth token
+  api.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('learning-buddy-auth');
+      console.log('authService: axios request interceptor token from localStorage:', token);
+      if (token) {
+        try {
+          const authData = JSON.parse(token);
+          console.log('authService: parsed authData:', authData);
+          if (authData.state?.token) {
+            let tokenValue = authData.state.token;
+            if (typeof tokenValue === 'object' && tokenValue.token) {
+              tokenValue = tokenValue.token;
+            }
+            config.headers.Authorization = `Bearer ${tokenValue}`;
+            console.log('authService: Authorization header set:', config.headers.Authorization);
+          } else {
+            console.log('authService: No token found in authData.state');
+          }
+        } catch (error) {
+          console.error('Error parsing auth token:', error);
         }
-      } catch (error) {
-        console.error('Error parsing auth token:', error);
+      } else {
+        console.log('authService: No token found in localStorage');
       }
+      console.log('authService: request config headers:', config.headers);
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  );
 
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
@@ -76,6 +88,13 @@ export const authService = {
   },
 
   updateProfile: (profileData) => {
+    if (profileData instanceof FormData) {
+      return api.put('/auth/profile', profileData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+    }
     return api.put('/auth/profile', profileData);
   },
 

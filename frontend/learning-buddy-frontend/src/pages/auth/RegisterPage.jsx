@@ -81,6 +81,9 @@ const RegisterPage = () => {
 
       await register(userData);
       toast.success('Account created successfully!');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const { initializeAuth } = useAuthStore.getState();
+      await initializeAuth();
       navigate('/app/dashboard');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Registration failed');
@@ -90,18 +93,16 @@ const RegisterPage = () => {
   };
 
   return (
-    <div>
+    <div className="max-w-md mx-auto p-8 rounded-xl shadow-lg border border-gray-300 bg-white text-gray-900">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-foreground">Create your account</h2>
-        <p className="text-muted-foreground mt-2">
-          Join thousands of learners on their journey to success
-        </p>
+        <h2 className="text-4xl font-extrabold mb-2 text-gray-900">Create your account</h2>
+        <p className="text-gray-600">Join thousands of learners on their journey to success</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="firstName">First name</Label>
+          <Label htmlFor="firstName" className="text-pink-600 opacity-100">First name</Label>
             <Input
               id="firstName"
               name="firstName"
@@ -109,12 +110,12 @@ const RegisterPage = () => {
               required
               value={formData.firstName}
               onChange={handleChange}
-              className="mt-1"
-              placeholder="John"
+              className="mt-1 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
+              placeholder="Alice"
             />
           </div>
           <div>
-            <Label htmlFor="lastName">Last name</Label>
+          <Label htmlFor="lastName" className="text-pink-600 opacity-100">Last name</Label>
             <Input
               id="lastName"
               name="lastName"
@@ -122,14 +123,14 @@ const RegisterPage = () => {
               required
               value={formData.lastName}
               onChange={handleChange}
-              className="mt-1"
-              placeholder="Doe"
+              className="mt-1 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
+              placeholder="Smith"
             />
           </div>
         </div>
 
         <div>
-          <Label htmlFor="username">Username</Label>
+          <Label htmlFor="username" className="text-pink-600 opacity-100">Username</Label>
           <Input
             id="username"
             name="username"
@@ -137,13 +138,13 @@ const RegisterPage = () => {
             required
             value={formData.username}
             onChange={handleChange}
-            className="mt-1"
-            placeholder="johndoe"
+            className="mt-1 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
+            placeholder="alice123"
           />
         </div>
 
         <div>
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email" className="text-pink-600 opacity-100">Email address</Label>
           <Input
             id="email"
             name="email"
@@ -152,13 +153,13 @@ const RegisterPage = () => {
             required
             value={formData.email}
             onChange={handleChange}
-            className="mt-1"
-            placeholder="john@example.com"
+            className="mt-1 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
+            placeholder="alice@example.com"
           />
         </div>
 
         <div>
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password" className="text-pink-600 opacity-100">Password</Label>
           <div className="relative mt-1">
             <Input
               id="password"
@@ -168,25 +169,25 @@ const RegisterPage = () => {
               required
               value={formData.password}
               onChange={handleChange}
-              placeholder="Create a strong password"
-              className="pr-10"
+              placeholder="Enter password"
+              className="pr-10 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-pink-600 hover:text-pink-800"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                <EyeOff className="h-4 w-4" />
               ) : (
-                <Eye className="h-4 w-4 text-muted-foreground" />
+                <Eye className="h-4 w-4" />
               )}
             </button>
           </div>
         </div>
 
         <div>
-          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <Label htmlFor="confirmPassword" className="text-pink-600 opacity-100">Confirm password</Label>
           <div className="relative mt-1">
             <Input
               id="confirmPassword"
@@ -197,17 +198,17 @@ const RegisterPage = () => {
               value={formData.confirmPassword}
               onChange={handleChange}
               placeholder="Confirm your password"
-              className="pr-10"
+              className="pr-10 bg-pink-50 text-pink-900 placeholder-pink-400 focus:ring-pink-400 focus:border-pink-400"
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-pink-600 hover:text-pink-800"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
             >
               {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                <EyeOff className="h-4 w-4" />
               ) : (
-                <Eye className="h-4 w-4 text-muted-foreground" />
+                <Eye className="h-4 w-4" />
               )}
             </button>
           </div>
@@ -215,7 +216,7 @@ const RegisterPage = () => {
 
         <Button
           type="submit"
-          className="w-full"
+          className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 hover:from-purple-600 hover:via-pink-600 hover:to-red-600 transition-colors duration-300"
           disabled={isLoading}
         >
           {isLoading ? 'Creating account...' : 'Create account'}
@@ -223,11 +224,11 @@ const RegisterPage = () => {
       </form>
 
       <div className="mt-6">
-        <div className="text-center text-sm text-muted-foreground">
+        <div className="text-center bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 rounded-md p-2 text-white font-semibold">
           Already have an account?{' '}
           <Link
             to="/auth/login"
-            className="text-primary hover:text-primary/80 font-medium"
+            className="underline hover:text-yellow-300 font-medium"
           >
             Sign in
           </Link>

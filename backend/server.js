@@ -25,12 +25,18 @@ app.use(compression());
 app.use(morgan('combined'));
 
 // CORS configuration
-app.use(cors({
+const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_URL 
     : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5174', 'http://localhost:5173', 'http://localhost:5174'],
-  credentials: true
-}));
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -94,4 +100,3 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 module.exports = app;
-

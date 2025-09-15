@@ -6,6 +6,7 @@ const authController = require('../../controllers/auth/authController');
 
 // Import middleware
 const { authenticateToken, updateLastLogin } = require('../../middleware/auth');
+const upload = require('../../middleware/upload');
 const {
   validateRegistration,
   validateLogin,
@@ -60,7 +61,7 @@ router.get('/profile', authenticateToken, updateLastLogin, authController.getPro
  * @desc    Update user profile
  * @access  Private
  */
-router.put('/profile', authenticateToken, validateProfileUpdate, authController.updateProfile);
+router.put('/profile', authenticateToken, upload.single('avatar'), validateProfileUpdate, authController.updateProfile);
 
 /**
  * @route   POST /api/auth/change-password

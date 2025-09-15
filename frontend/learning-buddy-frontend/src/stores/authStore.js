@@ -14,10 +14,13 @@ export const useAuthStore = create(
 
       // Actions
       login: async (credentials) => {
+        console.log('AuthStore: login called with credentials', credentials);
         set({ isLoading: true, error: null });
         try {
           const response = await authService.login(credentials);
-          const { user, token } = response.data;
+          console.log('AuthStore: login response', response);
+          const { user, token } = response.data.data;
+          console.log('AuthStore: extracted user and token', user, token);
           
           set({
             user,
@@ -26,12 +29,25 @@ export const useAuthStore = create(
             isLoading: false,
             error: null
           });
+          console.log('AuthStore: login state updated', { user, token });
           
           // Set token for future requests
           authService.setAuthToken(token);
+
+          // Persist token and user in localStorage correctly
+          localStorage.setItem('learning-buddy-auth', JSON.stringify({
+            state: {
+              user,
+              token,
+              isAuthenticated: true,
+              isInitializingAuth: false
+            }
+          }));
+          console.log('AuthStore: localStorage updated with auth state');
           
           return response;
         } catch (error) {
+          console.log('AuthStore: login error', error);
           set({
             isLoading: false,
             error: error.response?.data?.message || 'Login failed'
@@ -40,11 +56,70 @@ export const useAuthStore = create(
         }
       },
 
+      logout: () => {
+        console.log('AuthStore: logout called');
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
+        console.log('AuthStore: logout state updated');
+        
+        // Clear token from requests
+        authService.clearAuthToken();
+
+        // Clear localStorage
+        localStorage.removeItem('learning-buddy-auth');
+      },
+
+      refreshUser: async () => {
+      console.log('AuthStore: refreshUser called');
+      try {
+        const response = await authService.getProfile();
+        console.log('AuthStore: refreshUser response', response);
+        const { user } = response.data;
+        
+        set({ user, isAuthenticated: true });
+        console.log('AuthStore: refreshUser state updated');
+        return response;
+      } catch (error) {
+        console.log('AuthStore: refreshUser error', error);
+        get().logout();
+        throw error;
+      }
+      },
+
+      clearError: () => {
+        set({ error: null });
+      },
+
+      initializeAuth: async () => {
+      console.log('AuthStore: initializeAuth called');
+      set({ isInitializingAuth: true });
+      const { token } = get();
+      console.log('AuthStore: initializeAuth token:', token);
+      if (token) {
+        authService.setAuthToken(token);
+        try {
+          console.log('AuthStore: calling refreshUser');
+          await get().refreshUser();
+          console.log('AuthStore: refreshUser succeeded');
+          set({ isAuthenticated: true });
+        } catch (error) {
+          console.log('AuthStore: refreshUser failed', error);
+          // get().logout();
+        }
+      }
+      set({ isInitializingAuth: false });
+      },
+
       register: async (userData) => {
         set({ isLoading: true, error: null });
         try {
           const response = await authService.register(userData);
-          const { user, token } = response.data;
+          const { user, token } = response.data.data;
           
           set({
             user,
@@ -54,8 +129,16 @@ export const useAuthStore = create(
             error: null
           });
           
-          // Set token for future requests
           authService.setAuthToken(token);
+          
+          localStorage.setItem('learning-buddy-auth', JSON.stringify({
+            state: {
+              user,
+              token,
+              isAuthenticated: true,
+              isInitializingAuth: false
+            }
+          }));
           
           return response;
         } catch (error) {
@@ -65,19 +148,6 @@ export const useAuthStore = create(
           });
           throw error;
         }
-      },
-
-      logout: () => {
-        set({
-          user: null,
-          token: null,
-          isAuthenticated: false,
-          isLoading: false,
-          error: null
-        });
-        
-        // Clear token from requests
-        authService.clearAuthToken();
       },
 
       updateProfile: async (profileData) => {
@@ -100,50 +170,19 @@ export const useAuthStore = create(
           });
           throw error;
         }
-      },
-
-      refreshUser: async () => {
-        try {
-          const response = await authService.getProfile();
-          const { user } = response.data;
-          
-          set({ user });
-          return response;
-        } catch (error) {
-          // If refresh fails, logout user
-          get().logout();
-          throw error;
-        }
-      },
-
-      clearError: () => {
-        set({ error: null });
-      },
-
-      // Initialize auth state from stored token
-      initializeAuth: () => {
-        const { token } = get();
-        if (token) {
-          authService.setAuthToken(token);
-          // Optionally refresh user data
-          get().refreshUser().catch(() => {
-            // If refresh fails, clear stored auth
-            get().logout();
-          });
-        }
       }
     }),
     {
-      name: 'learning-buddy-auth',
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated
-      })
+      name: 'learning-buddy-auth'
     }
   )
 );
 
-// Initialize auth on store creation
-useAuthStore.getState().initializeAuth();
-
+useAuthStore.subscribe(
+  (state) => {
+    if (state._hasHydrated) {
+      useAuthStore.getState().initializeAuth();
+    }
+  },
+  (state) => state._hasHydrated
+);

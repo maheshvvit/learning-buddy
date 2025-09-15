@@ -154,24 +154,62 @@ const ChatPage = () => {
     setInputMessage('');
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = {
-        id: Date.now() + 1,
-        type: 'ai',
-        content: generateAIResponse(inputMessage),
-        timestamp: new Date(),
-        suggestions: [
-          'Can you explain this further?',
-          'Show me an example',
-          'What are the best practices?',
-          'How does this relate to other concepts?'
-        ]
-      };
+    try {
+      // Open SSE connection to backend
+      const response = await fetch(`/api/ai/chat/${currentSession}/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: inputMessage })
+      });
 
-      setMessages(prev => [...prev, aiResponse]);
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      let aiContent = '';
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        const chunk = decoder.decode(value, { stream: true });
+        aiContent += chunk;
+
+        // Update AI message dynamically
+        setMessages(prev => {
+          const lastMessage = prev[prev.length - 1];
+          if (lastMessage && lastMessage.type === 'ai' && lastMessage.id === 'streaming') {
+            // Update existing streaming message
+            const updated = [...prev];
+            updated[updated.length - 1] = { ...lastMessage, content: aiContent };
+            return updated;
+          } else {
+            // Add new streaming message
+            return [...prev, { id: 'streaming', type: 'ai', content: aiContent, timestamp: new Date() }];
+          }
+        });
+      }
+
+      // Finalize AI message
+      setMessages(prev => {
+        const updated = [...prev];
+        const index = updated.findIndex(m => m.id === 'streaming');
+        if (index !== -1) {
+          updated[index] = { ...updated[index], id: Date.now() };
+        }
+        return updated;
+      });
+
+    } catch (error) {
+      console.error('Error receiving AI response:', error);
+      setMessages(prev => [...prev, { id: Date.now(), type: 'ai', content: "Sorry, I couldn't process your request." }]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const generateAIResponse = (message) => {

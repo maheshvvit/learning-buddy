@@ -44,7 +44,7 @@ const startChatSession = async (req, res) => {
   }
 };
 
-// Send message to AI
+// Send message to AI with streaming via SSE
 const sendMessage = async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -73,23 +73,65 @@ const sendMessage = async (req, res) => {
       userMessage.attachments = attachments;
     }
 
-    // Get conversation context
-    const conversationContext = chatSession.getConversationContext();
+    await chatSession.save();
 
-    // Generate AI response
-    const startTime = Date.now();
-    
-    try {
-      const aiResponse = await generateChatResponse(conversationContext, {
-        maxTokens: 1000,
-        temperature: 0.7
-      });
+    // Set headers for SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    });
 
-      const responseTime = Date.now() - startTime;
+    // Flush headers
+    res.flushHeaders();
 
-      // Add AI response
-      const assistantMessage = chatSession.addMessage('assistant', aiResponse, {
-        responseTime,
+    // Get user's recent progress and context
+    const recentProgress = await UserProgress.find({ userId })
+      .sort({ completedAt: -1 })
+      .limit(5);
+
+    // Enhanced conversation context
+    const conversationContext = [
+      {
+        role: 'system',
+        content: `You are a personalized learning assistant. The user's name is ${chatSession.userId.name}, 
+                 they are at level ${chatSession.userId.gamification.level}. 
+                 Their learning preferences: ${JSON.stringify(chatSession.userId.learningPreferences)}.
+                 Recent progress: ${JSON.stringify(recentProgress.map(p => p.category))}.
+                 Please provide engaging, personalized responses.`
+      },
+      ...chatSession.messages.slice(-5).map(m => ({
+        role: m.role,
+        content: m.content
+      })),
+      { role: 'user', content: message }
+    ];
+
+    // OpenAI streaming call
+    const openai = require('openai');
+    const OpenAI = openai.OpenAI;
+    const openaiClient = new OpenAI();
+
+    const completion = await openaiClient.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4',
+      messages: conversationContext,
+      max_tokens: 1000,
+      temperature: 0.7,
+      stream: true
+    });
+
+    let assistantMessageContent = '';
+    completion.on('data', async (data) => {
+      const chunk = data.choices[0].delta?.content || '';
+      assistantMessageContent += chunk;
+
+      // Send chunk to client
+      res.write(`data: ${chunk}\n\n`);
+    });
+
+    completion.on('end', async () => {
+      // Add AI response to chat session
+      const assistantMessage = chatSession.addMessage('assistant', assistantMessageContent, {
         model: process.env.OPENAI_MODEL || 'gpt-4',
         temperature: 0.7,
         confidence: 0.9
@@ -103,36 +145,20 @@ const sendMessage = async (req, res) => {
 
       await chatSession.save();
 
-      res.json({
-        success: true,
-        data: {
-          userMessage,
-          assistantMessage,
-          sessionId: chatSession.sessionId
-        }
-      });
+      // Send event to indicate end of stream
+      res.write('event: end\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+    });
 
-    } catch (aiError) {
-      console.error('AI response error:', aiError);
-      
-      // Add fallback message
-      const fallbackMessage = "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.";
-      const assistantMessage = chatSession.addMessage('assistant', fallbackMessage, {
-        responseTime: Date.now() - startTime,
-        error: 'ai_service_error'
-      });
+    completion.on('error', async (error) => {
+      console.error('OpenAI streaming error:', error);
 
-      await chatSession.save();
-
-      res.json({
-        success: true,
-        data: {
-          userMessage,
-          assistantMessage,
-          sessionId: chatSession.sessionId
-        }
-      });
-    }
+      // Send error event
+      res.write('event: error\n');
+      res.write(`data: ${error.message}\n\n`);
+      res.end();
+    });
 
   } catch (error) {
     console.error('Send message error:', error);
@@ -351,46 +377,117 @@ const provideFeedback = async (req, res) => {
 
 // Helper functions
 
-const generateWelcomeMessage = (contextType) => {
-  const welcomeMessages = {
-    general: "Hello! I'm Learning Buddy, your AI-powered learning assistant. I'm here to help you with your learning journey. What would you like to learn about today?",
-    'challenge-help': "Hi! I'm here to help you with this challenge. I can provide hints, explain concepts, and guide you through the solution. What specific part would you like help with?",
-    'learning-path': "Welcome to your learning path! I'm here to guide you through each step and help you achieve your learning goals. How can I assist you today?",
-    'study-planning': "Hello! I'm here to help you create an effective study plan. Let's work together to organize your learning schedule and set achievable goals. What are you looking to study?",
-    'career-advice': "Hi there! I'm here to provide career guidance related to your learning goals. Whether you're looking to switch careers or advance in your current field, I can help you plan your learning journey. What are your career aspirations?"
+// Helper function for dynamic response generation
+const generateDynamicResponse = (type, context = {}, userProfile = {}) => {
+  const responses = {
+    welcome: [
+      "Hello {name}! 👋 I'm Learning Buddy, ready to help you learn and grow. What's on your mind today?",
+      "Hi {name}! 🌟 I'm excited to assist you on your learning journey. What would you like to explore?",
+      "Welcome back {name}! 📚 Ready to continue your learning adventure?",
+      "Greetings {name}! 🎯 I'm here to help you achieve your learning goals. What shall we focus on today?"
+    ],
+    challenge: [
+      "Great work on tackling this challenge! 💪 Need any specific hints or explanations?",
+      "I see you're working on {challengeType}. How can I help you master this concept?",
+      "You're making progress! 🚀 Let me know if you need help breaking this down into smaller steps.",
+      "This is an interesting challenge! Would you like me to explain the core concepts first?"
+    ],
+    learning_path: [
+      "Based on your progress in {topic}, here's a personalized next step for you.",
+      "I notice you excel at {strength}. Let's build on that with some advanced concepts!",
+      "Given your learning style and goals, I recommend focusing on {recommendation}.",
+      "Your recent achievements suggest you're ready for {nextLevel} content!"
+    ]
   };
 
-  return welcomeMessages[contextType] || welcomeMessages.general;
+  // Select response template based on type
+  const templates = responses[type] || responses.welcome;
+  const template = templates[Math.floor(Math.random() * templates.length)];
+
+  // Replace placeholders with context values
+  return template.replace(/\{(\w+)\}/g, (match, key) => {
+    return context[key] || userProfile[key] || match;
+  });
+};
+
+const generateWelcomeMessage = async (contextType, userId) => {
+  try {
+    // Get user data for personalization
+    const user = await User.findById(userId);
+    const timeOfDay = new Date().getHours() < 12 ? 'morning' : (new Date().getHours() < 17 ? 'afternoon' : 'evening');
+    
+    const context = {
+      name: user?.name || 'there',
+      timeOfDay,
+      lastTopic: user?.learningPreferences?.preferredTopics?.[0],
+      level: user?.gamification?.level
+    };
+
+    const welcomeContexts = {
+      general: generateDynamicResponse('welcome', context),
+      'challenge-help': generateDynamicResponse('challenge', {
+        ...context,
+        challengeType: user?.currentChallenge?.type || 'this challenge'
+      }),
+      'learning-path': generateDynamicResponse('learning_path', {
+        ...context,
+        topic: user?.learningPreferences?.currentFocus || 'your chosen topics'
+      })
+    };
+
+    return welcomeContexts[contextType] || welcomeContexts.general;
+  } catch (error) {
+    console.error('Error generating welcome message:', error);
+    return generateDynamicResponse('welcome', { name: 'there' });
+  }
 };
 
 const generateSuggestedActions = async (userMessage, context, userId) => {
   const actions = [];
+  const user = await User.findById(userId).select('gamification.level learningPreferences');
+  const userLevel = user?.gamification?.level || 1;
 
-  // Analyze message content for action suggestions
-  const lowerMessage = userMessage.toLowerCase();
+  // Analyze message intent and context
+  const messageIntent = userMessage.toLowerCase();
+  const userContext = {
+    level: userLevel,
+    preferences: user?.learningPreferences || {},
+    timeOfDay: new Date().getHours()
+  };
 
-  // Suggest challenges based on topics mentioned
-  if (lowerMessage.includes('practice') || lowerMessage.includes('exercise') || lowerMessage.includes('challenge')) {
-    const challenges = await Challenge.getRecommendedChallenges(userId, 3);
+  // Dynamic challenge suggestions based on user context
+  if (messageIntent.includes('practice') || messageIntent.includes('exercise') || messageIntent.includes('challenge')) {
+    const challenges = await Challenge.aggregate([
+      { $match: { difficulty: { $gte: userLevel - 1, $lte: userLevel + 1 } } },
+      { $sample: { size: 3 } }
+    ]);
+    
     if (challenges.length > 0) {
       actions.push({
         type: 'challenge',
-        title: 'Try a Practice Challenge',
-        description: 'Based on our conversation, here are some challenges you might find helpful',
-        actionData: { challenges: challenges.slice(0, 2) }
+        title: generateDynamicResponse('challenge', userContext),
+        description: 'Here are some challenges matched to your current level',
+        actionData: { challenges }
       });
     }
   }
 
-  // Suggest learning paths for structured learning
-  if (lowerMessage.includes('learn') || lowerMessage.includes('course') || lowerMessage.includes('path')) {
-    const paths = await LearningPath.getRecommendedPaths(userId, 2);
+  // More personalized learning path suggestions
+  if (messageIntent.includes('learn') || messageIntent.includes('course') || messageIntent.includes('path')) {
+    const paths = await LearningPath.aggregate([
+      { $match: { 
+        difficulty: { $gte: userLevel - 1, $lte: userLevel + 1 },
+        topics: { $in: user?.learningPreferences?.preferredTopics || [] }
+      }},
+      { $sample: { size: 2 } }
+    ]);
+
     if (paths.length > 0) {
       actions.push({
         type: 'learning-path',
-        title: 'Explore Learning Paths',
-        description: 'Check out these structured learning paths',
-        actionData: { paths: paths.slice(0, 1) }
+        title: generateDynamicResponse('learning_path', userContext),
+        description: 'Personalized learning paths based on your interests',
+        actionData: { paths }
       });
     }
   }

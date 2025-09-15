@@ -186,6 +186,67 @@ const updateProfile = async (req, res) => {
     delete updates.isActive;
     delete updates.isVerified;
 
+    // Handle avatar upload if present
+    if (req.file) {
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      // Save avatar file path relative to uploads folder
+      user.profile.avatar = `/uploads/avatars/${req.file.filename}`;
+
+      // Merge other updates except avatar
+      if (updates.profile) {
+        user.profile = { ...user.profile.toObject(), ...updates.profile };
+        delete updates.profile;
+      }
+      Object.assign(user, updates);
+
+      await user.save();
+
+      const populatedUser = await User.findById(userId).populate('gamification.badges.badgeId', 'name description icon rarity');
+
+      return res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: { user: populatedUser }
+      });
+    }
+
+    // Handle nested profile updates separately to merge fields
+    if (updates.profile) {
+      const profileUpdates = updates.profile;
+      delete updates.profile;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Merge profile fields
+      user.profile = { ...user.profile.toObject(), ...profileUpdates };
+
+      // Merge other top-level updates
+      Object.assign(user, updates);
+
+      await user.save();
+
+      const populatedUser = await User.findById(userId).populate('gamification.badges.badgeId', 'name description icon rarity');
+
+      return res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: { user: populatedUser }
+      });
+    }
+
+    // If no nested profile updates, proceed as before
     const user = await User.findByIdAndUpdate(
       userId,
       { $set: updates },

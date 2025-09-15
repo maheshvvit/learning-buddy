@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
   BookOpen, 
@@ -62,7 +62,13 @@ const userNavigation = [
 
 const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
+
+  const handleNavClick = (e, href) => {
+    e.preventDefault();
+    navigate(href);
+  };
 
   return (
     <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
@@ -108,9 +114,10 @@ const Sidebar = () => {
                            (item.href !== '/app/dashboard' && location.pathname.startsWith(item.href));
             
             return (
-              <NavLink
+              <a
                 key={item.name}
-                to={item.href}
+                href={item.href}
+                onClick={(e) => handleNavClick(e, item.href)}
                 className={cn(
                   'group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors',
                   isActive
@@ -125,7 +132,7 @@ const Sidebar = () => {
                   )}
                 />
                 {item.name}
-              </NavLink>
+              </a>
             );
           })}
         </nav>

@@ -37,9 +37,9 @@ const HomePage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-r from-purple-200 via-pink-200 to-red-200">
       {/* Navigation */}
-      <nav className="border-b border-border">
+      <nav className="border-b border-transparent">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
